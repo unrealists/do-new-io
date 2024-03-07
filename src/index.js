@@ -111,7 +111,7 @@ const INDEX_HTML = html`<!DOCTYPE html>
       exresBox.classList.add('code', 'shj-mode-header', 'shj-lang-plain', 'result');
       resultDiv.appendChild(exresBox);
       pyKernel.run(code, {stdoutCB: t=>{exresBox.textContent+=t}, stderrCB: t=>{exresBox.textContent+=t}}).then(exres=>{
-        exresBox.textContent+="\\n>> "+exres.result;
+        if(exres.result!==undefined) exresBox.textContent+="\\n>> "+exres.result;
         highlightElement(exresBox);
       });
     })
