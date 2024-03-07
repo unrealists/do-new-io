@@ -13,11 +13,13 @@ const INDEX_HTML = html`<!DOCTYPE html>
     <title>do.new</title>
     <meta name="description" content="do.new">
     <meta name="author" content="do.new">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/css?family=Raleway:400,300,600" rel="stylesheet" type="text/css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.14.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/@speed-highlight/core/dist/themes/github-dark.css">
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
     <style>
         body { overflow: hidden; color: #dcd9d4; background-color: #181a1b; }
         .section { position: relative; height: 95vh; }
@@ -28,6 +30,11 @@ const INDEX_HTML = html`<!DOCTYPE html>
         textarea { background-color: #222; color: #dcd9d4; }
         button { background-color: #222; color: #dcd9d4; }
         .hidden { display: none; }
+        .code { font: 1em 'Fira Code', monospace !important; max-height: 50vh; overflow: auto; border: 1px solid rgba(255,255,255,0.2);}
+        .code.shj-multiline.shj-mode-header:before { content: attr(data-language); }
+        .code.result { max-height: calc(76px * 4); }
+        .code.result.shj-multiline.shj-mode-header:before { content: "⚙ execution result"; cursor: pointer; }
+        .code.result:hover, .code.result:active, .code.result:focus { max-height: 50vh; }
     </style>
     <link rel="icon" type="image/png" href="favicon.png">
     <meta property="og:title" content="do.new">
@@ -68,7 +75,8 @@ const INDEX_HTML = html`<!DOCTYPE html>
     </div>
     <canvas id="canvas"/>
     <!-- <footer><div class="container"><div class="row"></div></div></footer> -->
-<script>
+<script type="module">
+  import { highlightElement } from 'https://unpkg.com/@speed-highlight/core/dist/index.js';
   const submitBtn = document.getElementById('submitButton');
   submitBtn.addEventListener('click', function() {
     const codeRequest = document.getElementById('inputArea').value;
@@ -79,15 +87,32 @@ const INDEX_HTML = html`<!DOCTYPE html>
       body: JSON.stringify({request: codeRequest})
     })
     .then(resp => resp.json())
-    .then(data => {
+    .then(async (data) => {
       const resultDiv = document.getElementById('result');
       const formDiv = document.getElementById('form');
       const code = data.codeBlocks?.[0]?.code || 'something went wrong';
-      const preElement = document.createElement('pre');
-      preElement.textContent = code;
-      resultDiv.appendChild(preElement);
+      const userRequest = data.userRequest;
+      const codeBox = document.createElement('div');
+      codeBox.classList.add('code', 'shj-lang-py');
+      codeBox.textContent = \`"""\${userRequest}"""\\n\${code}\`;
+      resultDiv.appendChild(codeBox);
+      highlightElement(codeBox);
       resultDiv.classList.toggle('hidden');
       formDiv.classList.toggle('hidden');
+      const msgBox = document.createElement('p');
+      msgBox.id = 'exres-msgbox';
+      msgBox.innerHTML = "Hold on, we're executing your code ... <i class='fas fa-cog fa-spin' style='color: #dcd9d4'></i>";
+      resultDiv.appendChild(msgBox);
+      const pyKernel = new PyodideKernel();
+      await pyKernel.init();
+      document.getElementById('exres-msgbox').remove();
+      const exresBox = document.createElement('div');
+      exresBox.classList.add('code', 'shj-mode-header', 'shj-lang-plain', 'result');
+      resultDiv.appendChild(exresBox);
+      pyKernel.run(code, {stdoutCB: t=>{exresBox.textContent+=t}, stderrCB: t=>{exresBox.textContent+=t}}).then(exres=>{
+        exresBox.textContent+="\\n>> "+exres.result;
+        highlightElement(exresBox);
+      });
     })
     .catch((error) => {
         console.error('Error:', error);
@@ -97,6 +122,24 @@ const INDEX_HTML = html`<!DOCTYPE html>
       submitBtn.querySelector('.hidden').classList.toggle('hidden');
     });
 });
+class PyodideKernel {
+  constructor() {
+    this.kernel = null;
+  }
+  async init() {
+    this.kernel = await loadPyodide();
+  }
+  async run(code, {stdoutCB=console.log, stderrCB=console.warn}={}) {
+    let stdout = '', stderr = '', stdmix = '';
+    this.kernel.setStdout({batched: (str) => {stdout+=str+'\\n'; stdmix+=str+'\\n'; stdoutCB(str)}});
+    this.kernel.setStderr({batched: (str) => {stderr+=str+'\\n'; stdmix+=str+'\\n'; stderrCB(str)}});
+    const result = await this.kernel.runPythonAsync(code).catch(err => {
+      stderr += err.toString();
+      stdmix += err.toString();
+    });
+    return {stdout, stderr, stdmix, result}
+  }
+}
 // dot wave effect:
 const c = document.getElementById('canvas').getContext('2d');
 const offscreenCanvas = document.createElement('canvas');
@@ -190,11 +233,13 @@ export default {
           throw new Error("Expected application/json content type");
       }
       const ai = new Ai(env.AI);
+      const userRequest = body?.request || "Write a hello world function";
       const messages = [
         { role: "system", content: "You are a friendly assistant that always answers with Python code in markdown code fences. You are not including any external libraries." },
-        { role: "user", content: body?.request || "Write a hello world function" },
+        { role: "user", content: userRequest },
       ];
       const answer = await await ai.run("@cf/mistral/mistral-7b-instruct-v0.1", { messages });
+      answer.userRequest = userRequest;
       if(answer.response){
           answer.codeBlocks = parseMarkdownCodeBlocks(answer.response);
       }
