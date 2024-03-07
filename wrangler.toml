@@ -1,6 +1,7 @@
-name = "worker-aged-meadow-ac59"
-main = "src/index.js"
 compatibility_date = "2024-03-05"
+main = "src/index.js"
+name = "donew"
+node_compat = true
 workers_dev = true
 
 [ai]
