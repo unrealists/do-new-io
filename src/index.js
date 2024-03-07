@@ -30,7 +30,7 @@ const INDEX_HTML = html`<!DOCTYPE html>
         textarea { background-color: #222; color: #dcd9d4; }
         button { background-color: #222; color: #dcd9d4; }
         .hidden { display: none; }
-        .code { font: 1em 'Fira Code', monospace !important; max-height: 50vh; overflow: auto; border: 1px solid rgba(255,255,255,0.2);}
+        .code { font: 1em 'Fira Code', monospace !important; max-height: 33vh; overflow: auto; border: 1px solid rgba(255,255,255,0.2);}
         .code.shj-multiline.shj-mode-header:before { content: attr(data-language); }
         .code.result { max-height: calc(76px * 4); }
         .code.result.shj-multiline.shj-mode-header:before { content: "⚙ execution result"; cursor: pointer; }
@@ -54,7 +54,7 @@ const INDEX_HTML = html`<!DOCTYPE html>
                         </div>
                     </div>
                     <div>
-                        <p>Where you can let your imagination run free and just create. <span>Whew!</span></p>
+                        <p>Where you can let your imagination run free and just create.<br><span>Ooo-wee!</span></p>
                     </div>
                     <div id="social-bar">
                         <a class="fas fa-envelope" href="mailto:"></a>
@@ -64,7 +64,7 @@ const INDEX_HTML = html`<!DOCTYPE html>
                 </div>
                 <div class="one-half column" style="margin-top: 25%">
                   <div id="form">
-                      <textarea id="inputArea" name="codeRequest" rows="6" cols="50" placeholder="Enter your code request ..."></textarea>
+                      <textarea id="inputArea" name="codeRequest" rows="6" cols="50" placeholder="Enter your code request ... e.g. write a greeting function that takes a name and outputs a greeting and call it"></textarea>
                       <button id="submitButton">Submit <i class="fas fa-cog fa-spin hidden" style="color: #dcd9d4"></i></button>
                   </div>
                   <div id="result" class="hidden">
@@ -88,13 +88,14 @@ const INDEX_HTML = html`<!DOCTYPE html>
     })
     .then(resp => resp.json())
     .then(async (data) => {
+      console.log(data);
       const resultDiv = document.getElementById('result');
       const formDiv = document.getElementById('form');
       const code = data.codeBlocks?.[0]?.code || 'something went wrong';
       const userRequest = data.userRequest;
       const codeBox = document.createElement('div');
       codeBox.classList.add('code', 'shj-lang-py');
-      codeBox.textContent = \`"""\${userRequest}"""\\n\${code}\`;
+      codeBox.textContent = '"""'+userRequest+'"""'+'\\n'+code;
       resultDiv.appendChild(codeBox);
       highlightElement(codeBox);
       resultDiv.classList.toggle('hidden');
@@ -233,7 +234,7 @@ export default {
           throw new Error("Expected application/json content type");
       }
       const ai = new Ai(env.AI);
-      const userRequest = body?.request || "Write a hello world function";
+      const userRequest = body?.request || "print hello world";
       const messages = [
         { role: "system", content: "You are a friendly assistant that always answers with Python code in markdown code fences. You are not including any external libraries." },
         { role: "user", content: userRequest },
@@ -244,6 +245,8 @@ export default {
           answer.codeBlocks = parseMarkdownCodeBlocks(answer.response);
       }
       return Response.json(answer);
+      // TODO: use streaming (https://developers.cloudflare.com/workers-ai/models/mistral-7b-instruct-v0.1#responses)
+      // Cloudflare limits output tokens when not using streaming!
     }
   }
 };
