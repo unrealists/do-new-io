@@ -208,14 +208,14 @@ loop();
 </body>
 </html>`;
 
-function parseMarkdownCodeBlocks(text, type='python') {
+function parseMarkdownCodeBlocks(text, type = 'python') {
   const codeBlocks = [];
   const pattern = new RegExp("```(" + type + ")([^`]+)```", "gis");
   const matches = text.matchAll(pattern);
   for (let match of matches) {
-      const lang = match[1] ? match[1].toLowerCase() : 'python';
-      const code = match[2].trim();
-      codeBlocks.push({lang, code});
+    const lang = match[1] ? match[1].toLowerCase() : 'python';
+    const code = match[2].trim();
+    codeBlocks.push({ lang, code });
   }
   return codeBlocks;
 }
@@ -229,9 +229,9 @@ export default {
     } else if (request.method === 'POST') {
       let body;
       if (request.headers.get('content-type')?.includes("application/json")) {
-          body = await request.json();
+        body = await request.json();
       } else {
-          throw new Error("Expected application/json content type");
+        throw new Error("Expected application/json content type");
       }
       const ai = new Ai(env.AI);
       const userRequest = body?.request || "print hello world";
@@ -239,14 +239,41 @@ export default {
         { role: "system", content: "You are a friendly assistant that always answers with Python code in markdown code fences. You are not including any external libraries." },
         { role: "user", content: userRequest },
       ];
-      const answer = await await ai.run("@cf/mistral/mistral-7b-instruct-v0.1", { messages });
-      answer.userRequest = userRequest;
-      if(answer.response){
-          answer.codeBlocks = parseMarkdownCodeBlocks(answer.response);
-      }
-      return Response.json(answer);
-      // TODO: use streaming (https://developers.cloudflare.com/workers-ai/models/mistral-7b-instruct-v0.1#responses)
-      // Cloudflare limits output tokens when not using streaming!
+      // const answer = await await ai.run("@cf/mistral/mistral-7b-instruct-v0.1", { messages });
+      // answer.userRequest = userRequest;
+      // if(answer.response){
+      //     answer.codeBlocks = parseMarkdownCodeBlocks(answer.response);
+      // }
+      // return Response.json(answer);
+
+      const answer = {};
+      let fullResponse = '';
+
+      const stream = await ai.run("@cf/mistral/mistral-7b-instruct-v0.1", { messages, stream: true });
+
+      const readableStream = new ReadableStream({
+        async start(controller) {
+          for await (const update of stream) {
+            const data = JSON.parse(new TextDecoder("utf-8").decode(update.slice(6)));
+            console.log(data)
+            fullResponse = '';
+            answer.userRequest = userRequest;
+            answer.codeBlocks = parseMarkdownCodeBlocks(fullResponse);
+            answer.response = fullResponse;
+            controller.enqueue(answer);
+          }
+          controller.close();
+        }
+      });
+
+      const responseStream = readableStream.pipeThrough(new TransformStream());
+
+      return new Response(responseStream, {
+        headers: {
+          "content-type": "text/event-stream",
+        },
+      });
+
     }
   }
 };
