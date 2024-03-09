@@ -67,8 +67,7 @@ const INDEX_HTML = html`<!DOCTYPE html>
                       <textarea id="inputArea" name="codeRequest" rows="6" cols="50" placeholder="Enter your code request ... e.g. write a greeting function that takes a name and outputs a greeting and call it"></textarea>
                       <button id="submitButton">Submit <i class="fas fa-cog fa-spin hidden" style="color: #dcd9d4"></i></button>
                   </div>
-                  <div id="result" class="hidden">
-                  </div>
+                  <div id="result" class="hidden"></div>
                 </div>
             </div>
         </div>
@@ -79,75 +78,58 @@ const INDEX_HTML = html`<!DOCTYPE html>
   import { highlightElement } from 'https://unpkg.com/@speed-highlight/core/dist/index.js';
   
   const submitBtn = document.getElementById('submitButton');
-  submitBtn.addEventListener('click', function() {
+  submitBtn.addEventListener('click', async function() {
+    const userRequest = document.getElementById('inputArea').value;
+    submitBtn.disabled = true;
+    submitBtn.querySelector('.hidden').classList.toggle('hidden');
+    
+    const resultDiv = document.getElementById('result');
+    const formDiv = document.getElementById('form');
+    resultDiv.classList.toggle('hidden');
+    formDiv.classList.toggle('hidden');
+    const codeBox = document.createElement('div');
+    codeBox.classList.add('code', 'shj-lang-py');
+    codeBox.textContent = '"""'+userRequest+'"""\\n';
+    resultDiv.appendChild(codeBox);
     const codeRequest = document.getElementById('inputArea').value;
     const source = new EventSource('/?q='+encodeURIComponent(codeRequest));
     source.onerror = (e) => {console.error('onerror',e); source.close();}
-    source.onmessage = (event) => {
-      console.log(event.data);
-      try{
+    source.onmessage = async (event) => {
+      // console.log(event.data);
+      try {
         const data = JSON.parse(event.data);
-        console.log(data);
+        codeBox.textContent += data.response;
+        //console.log(data);
         if (data.isFinal || data.response === undefined) {
           source.close();
+          const code = data.codeBlocks?.[0]?.code || 'something went wrong';
+          codeBox.textContent = '"""'+data.userRequest+'"""\\n'+code;
+          highlightElement(codeBox);
+          const msgBox = document.createElement('p');
+          msgBox.id = 'exres-msgbox';
+          msgBox.innerHTML = "Hold on, we're executing your code ... <i class='fas fa-cog fa-spin' style='color: #dcd9d4'></i>";
+          resultDiv.appendChild(msgBox);
+          const pyKernel = new PyodideKernel();
+          await pyKernel.init();
+          document.getElementById('exres-msgbox').remove();
+          const exresBox = document.createElement('div');
+          exresBox.classList.add('code', 'shj-mode-header', 'shj-lang-plain', 'result');
+          resultDiv.appendChild(exresBox);
+          pyKernel.run(code, {stdoutCB: t=>{exresBox.textContent+=t}, stderrCB: t=>{exresBox.textContent+=t}}).then(exres=>{
+            if(exres.result!==undefined) exresBox.textContent+="\\n>> "+exres.result;
+            highlightElement(exresBox);
+          });
           return;
         }
       }catch(err){
         console.error('catcherr',err);
         source.close();
       }
-      //const data = JSON.parse(event.data);
-      //el.innerHTML += data.response;
     }
-    // submitBtn.disabled = true;
-    // submitBtn.querySelector('.hidden').classList.toggle('hidden');
-    // fetch('/', {method: 'POST', headers: { 'Content-Type': 'application/json'},
-    //   body: JSON.stringify({request: codeRequest})
-    // })
-    // .then(resp => resp.json())
-    // .then(async (data) => {
-    //   console.log(data);
-    //   const resultDiv = document.getElementById('result');
-    //   const formDiv = document.getElementById('form');
-    //   const code = data.codeBlocks?.[0]?.code || 'something went wrong';
-    //   const userRequest = data.userRequest;
-    //   const codeBox = document.createElement('div');
-    //   codeBox.classList.add('code', 'shj-lang-py');
-    //   codeBox.textContent = '"""'+userRequest+'"""'+'\\n'+code;
-    //   resultDiv.appendChild(codeBox);
-    //   highlightElement(codeBox);
-    //   resultDiv.classList.toggle('hidden');
-    //   formDiv.classList.toggle('hidden');
-    //   const msgBox = document.createElement('p');
-    //   msgBox.id = 'exres-msgbox';
-    //   msgBox.innerHTML = "Hold on, we're executing your code ... <i class='fas fa-cog fa-spin' style='color: #dcd9d4'></i>";
-    //   resultDiv.appendChild(msgBox);
-    //   const pyKernel = new PyodideKernel();
-    //   await pyKernel.init();
-    //   document.getElementById('exres-msgbox').remove();
-    //   const exresBox = document.createElement('div');
-    //   exresBox.classList.add('code', 'shj-mode-header', 'shj-lang-plain', 'result');
-    //   resultDiv.appendChild(exresBox);
-    //   pyKernel.run(code, {stdoutCB: t=>{exresBox.textContent+=t}, stderrCB: t=>{exresBox.textContent+=t}}).then(exres=>{
-    //     if(exres.result!==undefined) exresBox.textContent+="\\n>> "+exres.result;
-    //     highlightElement(exresBox);
-    //   });
-    // })
-    // .catch((error) => {
-    //     console.error('Error:', error);
-    // })
-    // .finally(()=>{
-    //   submitBtn.disabled = false;
-    //   submitBtn.querySelector('.hidden').classList.toggle('hidden');
-    // });
-});
+  });
 class PyodideKernel {
-  constructor() {
-    this.kernel = null;
-  }
-  async init() {
-    this.kernel = await loadPyodide();
-  }
+  constructor() { this.kernel = null; }
+  async init() { this.kernel = await loadPyodide(); }
   async run(code, {stdoutCB=console.log, stderrCB=console.warn}={}) {
     let stdout = '', stderr = '', stdmix = '';
     this.kernel.setStdout({batched: (str) => {stdout+=str+'\\n'; stdmix+=str+'\\n'; stdoutCB(str)}});
@@ -203,7 +185,7 @@ const loop = () => {
     if (a < 0.01) return;
     if (z < 0) return;
     c.globalAlpha = a;
-    c.fillStyle = \`hsl(\${57 + wave * 4}deg, 86%, 27%)\`;
+    c.fillStyle = 'hsl('+(57 + wave * 4)+'deg 86% 27%)';
     c.fillRect(x - a * vertexSize / 2, y - a * vertexSize / 2, a * vertexSize, a * vertexSize);
     c.globalAlpha = 1;
   });
@@ -257,22 +239,21 @@ export default {
             for await (const update of stream) {
               const txt = new TextDecoder("utf-8").decode(update.slice(6));
               let msg = {};
+              let data = '';
               try {
-                const data = JSON.parse(txt);
+                data = JSON.parse(txt);
                 fulltext += data.response;
                 codeBlocks = parseMarkdownCodeBlocks(fulltext);
-                msg = { userRequest, codeBlocks, response: fulltext };
+                msg = { userRequest, codeBlocks, response: data.response };
               } catch (err) {
-                msg = { userRequest, codeBlocks, response: fulltext, isFinal: true }
+                msg = { userRequest, codeBlocks, response: data.response, isFinal: true }
               }
-              console.log(msg)
-              controller.enqueue(new TextEncoder().encode(JSON.stringify(msg)));
+              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(msg)}\n\n`));
             }
             controller.close();
           }
         });
-        const responseStream = readableStream.pipeThrough(new TransformStream());
-        return new Response(responseStream, { headers: { "content-type": "text/event-stream" } });
+        return new Response(readableStream, { headers: { "content-type": "text/event-stream" } });
       } else {
         return new Response(INDEX_HTML, { headers: { "content-type": "text/html" } });
       }

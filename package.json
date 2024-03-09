@@ -5,9 +5,10 @@
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
-    "start": "wrangler dev"
+    "start": "wrangler dev",
+    "build": "wrangler build"
   },
   "devDependencies": {
-    "wrangler": "^3.0.0"
+    "wrangler": "^3.32.0"
   }
 }
