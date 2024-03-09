@@ -102,7 +102,8 @@ const INDEX_HTML = html`<!DOCTYPE html>
         //console.log(data);
         if (data.isFinal || data.response === undefined) {
           source.close();
-          const code = data.codeBlocks?.[0]?.code || 'something went wrong';
+          const code = data.codeBlocks?.[0]?.code;
+          if(!code) return;
           codeBox.textContent = '"""'+data.userRequest+'"""\\n'+code;
           highlightElement(codeBox);
           const msgBox = document.createElement('p');
