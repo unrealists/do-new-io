@@ -77,51 +77,69 @@ const INDEX_HTML = html`<!DOCTYPE html>
     <!-- <footer><div class="container"><div class="row"></div></div></footer> -->
 <script type="module">
   import { highlightElement } from 'https://unpkg.com/@speed-highlight/core/dist/index.js';
+  
   const submitBtn = document.getElementById('submitButton');
   submitBtn.addEventListener('click', function() {
     const codeRequest = document.getElementById('inputArea').value;
-
-    submitBtn.disabled = true;
-    submitBtn.querySelector('.hidden').classList.toggle('hidden');
-    fetch('/', {method: 'POST', headers: { 'Content-Type': 'application/json'},
-      body: JSON.stringify({request: codeRequest})
-    })
-    .then(resp => resp.json())
-    .then(async (data) => {
-      console.log(data);
-      const resultDiv = document.getElementById('result');
-      const formDiv = document.getElementById('form');
-      const code = data.codeBlocks?.[0]?.code || 'something went wrong';
-      const userRequest = data.userRequest;
-      const codeBox = document.createElement('div');
-      codeBox.classList.add('code', 'shj-lang-py');
-      codeBox.textContent = '"""'+userRequest+'"""'+'\\n'+code;
-      resultDiv.appendChild(codeBox);
-      highlightElement(codeBox);
-      resultDiv.classList.toggle('hidden');
-      formDiv.classList.toggle('hidden');
-      const msgBox = document.createElement('p');
-      msgBox.id = 'exres-msgbox';
-      msgBox.innerHTML = "Hold on, we're executing your code ... <i class='fas fa-cog fa-spin' style='color: #dcd9d4'></i>";
-      resultDiv.appendChild(msgBox);
-      const pyKernel = new PyodideKernel();
-      await pyKernel.init();
-      document.getElementById('exres-msgbox').remove();
-      const exresBox = document.createElement('div');
-      exresBox.classList.add('code', 'shj-mode-header', 'shj-lang-plain', 'result');
-      resultDiv.appendChild(exresBox);
-      pyKernel.run(code, {stdoutCB: t=>{exresBox.textContent+=t}, stderrCB: t=>{exresBox.textContent+=t}}).then(exres=>{
-        if(exres.result!==undefined) exresBox.textContent+="\\n>> "+exres.result;
-        highlightElement(exresBox);
-      });
-    })
-    .catch((error) => {
-        console.error('Error:', error);
-    })
-    .finally(()=>{
-      submitBtn.disabled = false;
-      submitBtn.querySelector('.hidden').classList.toggle('hidden');
-    });
+    const source = new EventSource('/?q='+encodeURIComponent(codeRequest));
+    source.onerror = (e) => {console.error('onerror',e); source.close();}
+    source.onmessage = (event) => {
+      console.log(event.data);
+      try{
+        const data = JSON.parse(event.data);
+        console.log(data);
+        if (data.isFinal || data.response === undefined) {
+          source.close();
+          return;
+        }
+      }catch(err){
+        console.error('catcherr',err);
+        source.close();
+      }
+      //const data = JSON.parse(event.data);
+      //el.innerHTML += data.response;
+    }
+    // submitBtn.disabled = true;
+    // submitBtn.querySelector('.hidden').classList.toggle('hidden');
+    // fetch('/', {method: 'POST', headers: { 'Content-Type': 'application/json'},
+    //   body: JSON.stringify({request: codeRequest})
+    // })
+    // .then(resp => resp.json())
+    // .then(async (data) => {
+    //   console.log(data);
+    //   const resultDiv = document.getElementById('result');
+    //   const formDiv = document.getElementById('form');
+    //   const code = data.codeBlocks?.[0]?.code || 'something went wrong';
+    //   const userRequest = data.userRequest;
+    //   const codeBox = document.createElement('div');
+    //   codeBox.classList.add('code', 'shj-lang-py');
+    //   codeBox.textContent = '"""'+userRequest+'"""'+'\\n'+code;
+    //   resultDiv.appendChild(codeBox);
+    //   highlightElement(codeBox);
+    //   resultDiv.classList.toggle('hidden');
+    //   formDiv.classList.toggle('hidden');
+    //   const msgBox = document.createElement('p');
+    //   msgBox.id = 'exres-msgbox';
+    //   msgBox.innerHTML = "Hold on, we're executing your code ... <i class='fas fa-cog fa-spin' style='color: #dcd9d4'></i>";
+    //   resultDiv.appendChild(msgBox);
+    //   const pyKernel = new PyodideKernel();
+    //   await pyKernel.init();
+    //   document.getElementById('exres-msgbox').remove();
+    //   const exresBox = document.createElement('div');
+    //   exresBox.classList.add('code', 'shj-mode-header', 'shj-lang-plain', 'result');
+    //   resultDiv.appendChild(exresBox);
+    //   pyKernel.run(code, {stdoutCB: t=>{exresBox.textContent+=t}, stderrCB: t=>{exresBox.textContent+=t}}).then(exres=>{
+    //     if(exres.result!==undefined) exresBox.textContent+="\\n>> "+exres.result;
+    //     highlightElement(exresBox);
+    //   });
+    // })
+    // .catch((error) => {
+    //     console.error('Error:', error);
+    // })
+    // .finally(()=>{
+    //   submitBtn.disabled = false;
+    //   submitBtn.querySelector('.hidden').classList.toggle('hidden');
+    // });
 });
 class PyodideKernel {
   constructor() {
@@ -223,57 +241,41 @@ function parseMarkdownCodeBlocks(text, type = 'python') {
 export default {
   async fetch(request, env) {
     if (request.method === 'GET') {
-      return new Response(INDEX_HTML, {
-        headers: { 'content-type': 'text/html' },
-      });
-    } else if (request.method === 'POST') {
-      let body;
-      if (request.headers.get('content-type')?.includes("application/json")) {
-        body = await request.json();
-      } else {
-        throw new Error("Expected application/json content type");
-      }
-      const ai = new Ai(env.AI);
-      const userRequest = body?.request || "print hello world";
-      const messages = [
-        { role: "system", content: "You are a friendly assistant that always answers with Python code in markdown code fences. You are not including any external libraries." },
-        { role: "user", content: userRequest },
-      ];
-      // const answer = await await ai.run("@cf/mistral/mistral-7b-instruct-v0.1", { messages });
-      // answer.userRequest = userRequest;
-      // if(answer.response){
-      //     answer.codeBlocks = parseMarkdownCodeBlocks(answer.response);
-      // }
-      // return Response.json(answer);
-
-      const answer = {};
-      let fullResponse = '';
-
-      const stream = await ai.run("@cf/mistral/mistral-7b-instruct-v0.1", { messages, stream: true });
-
-      const readableStream = new ReadableStream({
-        async start(controller) {
-          for await (const update of stream) {
-            const data = JSON.parse(new TextDecoder("utf-8").decode(update.slice(6)));
-            console.log(data)
-            fullResponse = '';
-            answer.userRequest = userRequest;
-            answer.codeBlocks = parseMarkdownCodeBlocks(fullResponse);
-            answer.response = fullResponse;
-            controller.enqueue(answer);
+      const params = new URL(request.url).searchParams;
+      if (params.has('q') && request.headers.get('accept')?.includes("text/event-stream")) {
+        const ai = new Ai(env.AI);
+        const userRequest = params.get('q') || "say hi";
+        const messages = [
+          { role: "system", content: "You are a friendly assistant that always answers with Python code in markdown code fences. You are not including any external libraries." },
+          { role: "user", content: userRequest },
+        ];
+        let fulltext = '';
+        let codeBlocks = [];
+        const stream = await ai.run("@cf/mistral/mistral-7b-instruct-v0.1", { messages, stream: true });
+        const readableStream = new ReadableStream({
+          async start(controller) {
+            for await (const update of stream) {
+              const txt = new TextDecoder("utf-8").decode(update.slice(6));
+              let msg = {};
+              try {
+                const data = JSON.parse(txt);
+                fulltext += data.response;
+                codeBlocks = parseMarkdownCodeBlocks(fulltext);
+                msg = { userRequest, codeBlocks, response: fulltext };
+              } catch (err) {
+                msg = { userRequest, codeBlocks, response: fulltext, isFinal: true }
+              }
+              console.log(msg)
+              controller.enqueue(new TextEncoder().encode(JSON.stringify(msg)));
+            }
+            controller.close();
           }
-          controller.close();
-        }
-      });
-
-      const responseStream = readableStream.pipeThrough(new TransformStream());
-
-      return new Response(responseStream, {
-        headers: {
-          "content-type": "text/event-stream",
-        },
-      });
-
+        });
+        const responseStream = readableStream.pipeThrough(new TransformStream());
+        return new Response(responseStream, { headers: { "content-type": "text/event-stream" } });
+      } else {
+        return new Response(INDEX_HTML, { headers: { "content-type": "text/html" } });
+      }
     }
   }
 };
