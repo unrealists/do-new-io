@@ -86,7 +86,7 @@ const INDEX_HTML = html`<!DOCTYPE html>
     <!-- <footer><div class="container"><div class="row"></div></div></footer> -->
 <script type="module">
   import { highlightElement } from 'https://unpkg.com/@speed-highlight/core/dist/index.js';
-  const randomId = (len) => [...Array(len)].map(() => Math.random().toString(36)[2] || '0').join('');
+  const randomId = (len=32) => [...Array(len)].map(() => Math.random().toString(36)[2] || '0').join('');
   document.getElementById('backtoform').addEventListener('click', showForm);
   function updateTaskList(){
     const tasks = JSON.parse(localStorage.getItem('tasks') || '[]');
@@ -99,7 +99,7 @@ const INDEX_HTML = html`<!DOCTYPE html>
       e.setAttribute('data-request', t.request);
       e.setAttribute('data-response', t.response);
       e.setAttribute('data-result', t.result);
-      e.addEventListener('click', (event) => {event.stopPropagation(); showTask(t.request, t.response, t.result)});
+      e.addEventListener('click', (event) => {event.stopPropagation(); showTask(t)});
       const del = document.createElement('i');
       del.classList.add('fa','fa-trash');
       del.addEventListener('click', (event) => { event.stopPropagation(); delTask(t.id); });
@@ -123,27 +123,32 @@ const INDEX_HTML = html`<!DOCTYPE html>
   function getTask(id){
     return JSON.parse(localStorage.getItem('tasks') || '[]').find(t=>t.id==id)
   }
-  function showTask(request, response, result){
+  function showTask(t){
     const codebox = document.getElementById('codebox');
-    codebox.textContent = response;
+    codebox.textContent = t.response;
     highlightElement(codebox);
     codebox.classList.remove('hidden');
     document.getElementById('exres-msgbox').classList.add('hidden');
     const exresbox = document.getElementById('exresbox');
-    exresbox.textContent = result;
+    exresbox.textContent = t.result;
     highlightElement(exresbox);
     exresbox.classList.remove('hidden');
     document.getElementById('result').classList.remove('hidden');
     document.getElementById('form').classList.add('hidden');
+    window.location.hash = t.id;
   }
   function showForm(){
     document.getElementById('result').classList.add('hidden');
     document.getElementById('codebox').textContent = '';
     document.getElementById('exresbox').textContent = '';
     document.getElementById('form').classList.remove('hidden');
-    submitBtn.querySelector('.hidden').classList.toggle('hidden');
+    submitBtn.querySelector('i').classList.add('hidden');
+    window.location.hash = '';
   }
   updateTaskList();
+
+  let hash = window.location.hash.substring(1);
+  if(hash && getTask(hash)) showTask(getTask(hash));
 
   const submitBtn = document.getElementById('submitButton');
   submitBtn.addEventListener('click', async function() {
@@ -167,7 +172,7 @@ const INDEX_HTML = html`<!DOCTYPE html>
         //console.log(data);
         if (data.isFinal || data.response === undefined) {
           source.close();
-          const code = data.codeBlocks?.[0]?.code;
+          const code = data.codeBlocks.reduce((s,e)=>s+e.code+"\\n\\n","");
           if(!code) return;
           codebox.textContent = '"""'+data.userRequest+'"""\\n'+code;
           highlightElement(codebox);
@@ -189,6 +194,8 @@ const INDEX_HTML = html`<!DOCTYPE html>
       }catch(err){
         console.error('catcherr',err);
         source.close();
+      }finally{
+        submitBtn.disabled = false;
       }
     }
   });
